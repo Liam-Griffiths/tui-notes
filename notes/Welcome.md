@@ -1,6 +1,7 @@
 # Welcome to CUI Notes!
 
-This is a **gorgeous** console-based notes application with **folder support** and **.md files**!
+This is a **gorgeous** console-based notes application with **folder support** and **.md 
+files**!
 
 ## 🆕 New Features in v4.0
 

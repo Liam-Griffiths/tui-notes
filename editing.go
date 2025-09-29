@@ -55,7 +55,58 @@ func (app *App) selectItem(g *gocui.Gui, v *gocui.View) error {
 // handleEnterInMainView handles Enter key in main view
 func (app *App) handleEnterInMainView(g *gocui.Gui, v *gocui.View) error {
 	if app.isEditMode {
-		// In edit mode, Enter should add a new line (default behavior)
+		// In edit mode, Enter should add a new line
+		// We need to manually handle this since we've overridden the default behavior
+		cx, cy := v.Cursor()
+		ox, oy := v.Origin()
+
+		// Get current content
+		v.Rewind()
+		buffer := v.ViewBuffer()
+		lines := strings.Split(buffer, "\n")
+
+		// Calculate actual position in the text
+		actualY := cy + oy
+		actualX := cx + ox
+
+		// Insert newline at cursor position
+		if actualY < len(lines) {
+			currentLine := lines[actualY]
+			// Split the current line at cursor position
+			if actualX <= len(currentLine) {
+				before := currentLine[:actualX]
+				after := currentLine[actualX:]
+				lines[actualY] = before
+				// Insert new line after current line
+				newLines := make([]string, 0, len(lines)+1)
+				newLines = append(newLines, lines[:actualY+1]...)
+				newLines = append(newLines, after)
+				newLines = append(newLines, lines[actualY+1:]...)
+				lines = newLines
+			}
+		} else {
+			// At end of file, just add a new line
+			lines = append(lines, "")
+		}
+
+		// Update view content
+		newContent := strings.Join(lines, "\n")
+		v.Clear()
+		fmt.Fprint(v, newContent)
+
+		// Handle cursor positioning and viewport scrolling
+		_, maxY := v.Size()
+		newCursorY := cy + 1
+
+		// If the new cursor position would be beyond the visible area, scroll the view
+		if newCursorY >= maxY {
+			// Scroll the view down to keep cursor visible
+			v.SetOrigin(ox, oy+1)
+			v.SetCursor(0, maxY-1) // Keep cursor at bottom of view
+		} else {
+			// Move cursor to beginning of new line
+			v.SetCursor(0, newCursorY)
+		}
 		return nil
 	} else {
 		// In view mode, Enter should start editing

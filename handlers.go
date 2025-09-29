@@ -74,8 +74,13 @@ func (app *App) setKeybindings() error {
 		return err
 	}
 
-	// Remove arrow key bindings to allow normal cursor movement in edit mode
-	// Scrolling will be handled by PgUp/PgDn, Home/End keys instead
+	// Arrow keys for scrolling in view mode (cursor movement in edit mode is handled by gocui)
+	if err := app.gui.SetKeybinding(MAIN_VIEW, gocui.KeyArrowUp, gocui.ModNone, app.handleScrollUp); err != nil {
+		return err
+	}
+	if err := app.gui.SetKeybinding(MAIN_VIEW, gocui.KeyArrowDown, gocui.ModNone, app.handleScrollDown); err != nil {
+		return err
+	}
 
 	// Page up/down for larger jumps
 	if err := app.gui.SetKeybinding(MAIN_VIEW, gocui.KeyPgup, gocui.ModNone, app.handlePageUp); err != nil {
@@ -295,16 +300,29 @@ func (app *App) toggleSidebar(g *gocui.Gui, v *gocui.View) error {
 // SCROLL HANDLERS
 // =============================================================================
 
-// handleScrollUp handles scroll up events (PgUp/PgDn for regular files)
+// handleScrollUp handles scroll up events (arrow keys and page up)
 func (app *App) handleScrollUp(g *gocui.Gui, v *gocui.View) error {
 	if v.Editable {
-		return nil // Don't scroll in edit mode - let default cursor movement happen
+		// In edit mode, handle cursor movement with viewport following
+		cx, cy := v.Cursor()
+		ox, oy := v.Origin()
+
+		// Simple approach: try to move cursor up, if at edge try to scroll
+		if cy > 0 {
+			// Move cursor up within view
+			v.SetCursor(cx, cy-1)
+		} else if oy > 0 {
+			// Cursor is at top of view, scroll the view up
+			v.SetOrigin(ox, oy-1)
+		}
+		return nil
 	}
 
+	// View mode scrolling
 	if app.isLargeFile {
 		return app.scrollUp()
 	} else {
-		// For regular files, use gocui's built-in scrolling
+		// For regular files in view mode, use gocui's built-in scrolling
 		ox, oy := v.Origin()
 		if oy > 0 {
 			v.SetOrigin(ox, oy-1)
@@ -316,20 +334,47 @@ func (app *App) handleScrollUp(g *gocui.Gui, v *gocui.View) error {
 // handleScrollDown handles scroll down events
 func (app *App) handleScrollDown(g *gocui.Gui, v *gocui.View) error {
 	if v.Editable {
-		return nil // Don't scroll in edit mode - let default cursor movement happen
+		// In edit mode, handle cursor movement with viewport following
+		cx, cy := v.Cursor()
+		ox, oy := v.Origin()
+		_, maxY := v.Size()
+
+		// Get total lines in buffer to check bounds
+		v.Rewind()
+		buffer := v.ViewBuffer()
+		lines := strings.Split(buffer, "\n")
+		totalLines := len(lines)
+
+		// Simple approach: try to move cursor down, if at edge try to scroll
+		currentLine := cy + oy     // Current absolute line position (0-based)
+		lastLine := totalLines - 1 // Last line index (0-based)
+
+		if cy < maxY-1 {
+			// Cursor can move down within view - check if there's a line below
+			if currentLine < lastLine {
+				v.SetCursor(cx, cy+1)
+			}
+		} else {
+			// Cursor is at bottom of view - try to scroll down
+			if currentLine < lastLine {
+				v.SetOrigin(ox, oy+1)
+			}
+		}
+		return nil
 	}
 
+	// View mode scrolling
 	if app.isLargeFile {
 		return app.scrollDown()
 	} else {
-		// For regular files, use gocui's built-in scrolling
+		// For regular files in view mode, use gocui's built-in scrolling
 		ox, oy := v.Origin()
 		_, maxY := v.Size()
 		// Get the number of lines in the view buffer
 		v.Rewind()
 		buffer := v.ViewBuffer()
 		lines := strings.Split(buffer, "\n")
-		if oy < len(lines)-maxY {
+		if oy+maxY < len(lines) {
 			v.SetOrigin(ox, oy+1)
 		}
 		return nil
