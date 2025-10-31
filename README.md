@@ -1,4 +1,4 @@
-# CUI Notes
+# TUI Notes
 
 A clean, terminal-based notes app with markdown support and folder organization.
 
